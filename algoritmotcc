@@ -1,0 +1,1536 @@
+#from msilib.schema import Icon
+from cgi import test
+from cgitb import text
+from email import message
+from fileinput import close
+from multiprocessing import Pool
+from ast import While
+from glob import glob
+from operator import truediv
+from time import sleep
+#os ( gerenciamento de pastas com o sistema operacional)
+import os
+import io
+from cProfile import label
+from distutils.cmd import Command
+from email.mime import image
+from optparse import Values
+
+from skimage.metrics import structural_similarity as ssim
+import argparse
+import imutils
+
+#tkinter (interface grafica)
+from tkinter import *
+from tkinter import ttk
+from tkinter import messagebox
+from turtle import update
+
+# reportlab(criador de PDF)
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import SimpleDocTemplate, Image
+from reportlab.lib.utils import ImageReader
+
+#webbrowser ( abertura de navegador)
+import webbrowser
+
+#base64 (conversor de dados para registro)
+import base64
+
+#opencv ( tratamento de imagens )
+import cv2
+
+#numpy ( matematica)
+import numpy as np
+
+#sqlite ( banco de dados para registro)
+import sqlite3
+from sqlite3 import Error
+#PIL trabalha com imagens em diferentes formatos
+import PIL.Image as Image
+from PIL import Image,ImageTk
+import matplotlib.pyplot as plt
+import PIL.Image, PIL.ImageTk
+#Rpi.GPIO pinout da raspberry
+import RPi.GPIO as gpio
+import time
+import datetime
+## setup de IO.
+
+import keyboard
+import threading
+
+from tkinter import messagebox as msgb
+
+import keyboard
+
+#imagens
+
+gpio.setwarnings(False)
+##entradas
+gpio.setmode(gpio.BCM)
+gpio.setup(16,gpio.IN, gpio.PUD_UP)##botão verde
+gpio.setup(20,gpio.IN, gpio.PUD_UP)##botão amarelo 
+gpio.setup(21,gpio.IN, gpio.PUD_UP)##botão vermelho
+gpio.setup(14,gpio.IN, gpio.PUD_UP)##molde aberto
+gpio.setup(15,gpio.IN, gpio.PUD_UP)##molde fechado
+gpio.setup(18,gpio.IN, gpio.PUD_UP)##automatico
+gpio.setup(23,gpio.IN, gpio.PUD_UP)##reservado(porta fechada)
+gpio.setup(24,gpio.IN, gpio.PUD_UP)##reservado()
+
+##saidas
+gpio.setup(2,gpio.OUT)##libera ciclo
+gpio.setup(3,gpio.OUT)##erro
+gpio.setup(4,gpio.OUT)##bloqueia avanço molde
+gpio.setup(17,gpio.OUT)##emergencia1
+gpio.setup(27,gpio.OUT)##emergencia2
+gpio.setup(22,gpio.OUT)##reservado
+
+#inicia saidas altas
+gpio.output(2,gpio.LOW)
+gpio.output(3,gpio.LOW)
+gpio.output(4,gpio.LOW)
+gpio.output(17,gpio.LOW)
+gpio.output(27,gpio.LOW)
+gpio.output(22,gpio.LOW)
+
+
+#inicia marcadores
+maquina_liberada=False
+ciclo_iniciado=False
+erro=True
+padrão_configurado=False
+grava_padrão=False
+vizualização_liberada=False
+emergencia=True
+
+escala=3.6
+
+blur=1
+abertura=1
+
+numero_circulos_padrao=0
+numero_circulos_padrao2=0
+
+min_raio=0
+max_raio=0
+
+min_raio2=0
+max_raio2=0
+
+limite_erro=0
+kernel=np.ones((3,3),np.uint8)
+
+
+#kernel=np.ones((11,11),np.uint8)
+#seta resolução de camera
+video=cv2.VideoCapture(0)
+def make_1080p():
+    video.set(3,1600)
+    video.set(4,1200)
+
+def chage_res(width, height):
+    video.set(3,width)
+    video.set(4,height)
+make_1080p()
+
+#inicia tela 
+root = Tk()
+#imagens de erro
+ligado=ImageTk.PhotoImage(Image.open("/media/pi/5EEA-AED9/projeto_tcc/ligado.png"))
+desligado=ImageTk.PhotoImage(Image.open("/media/pi/5EEA-AED9/projeto_tcc/desligado.png"))
+erro_img=ImageTk.PhotoImage(Image.open("/media/pi/5EEA-AED9/projeto_tcc/erro.png"))
+img_vazia=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+
+# inicia imagens
+img_salva_referencia=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_paremetro_ciclo_atual=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_parametro_ciclo_atual_normalizada=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_ciclo_comparação=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_ciclo_registro_feito=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_ciclo_diferencas=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+# inicia imagens reduzidas
+img_resize_padrao=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_resize_comparação=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_resize_registro_feito=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+img_resize_diferencas=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+
+imgtk_padrao=PhotoImage(file="/media/pi/5EEA-AED9/projeto_tcc/cameravazia.png")
+
+#imagens botões
+img_button1=ligado
+img_button2=ligado
+img_button3=ligado
+img_button4=ligado
+img_button5=ligado
+img_button6=ligado
+img_button7=ligado
+img_button8=ligado
+
+img_buttons1=ligado
+img_buttons2=ligado
+img_buttons3=ligado
+img_buttons4=ligado
+img_buttons5=ligado
+img_buttons6=ligado
+
+class relatorios():
+    def printCliente(self):
+        webbrowser.open("cliente.pdf")
+    def gerarelatcliente(self):
+        self.c=canvas.Canvas("cliente.pdf")
+        self.codigorel=self.codigo_entry.get()
+        self.nomerel=self.nome_entry.get()
+        self.telefonerel=self.telefone_entry.get()
+        self.cidaderel=self.cidade_entry.get()
+
+        self.c.setFont("Helvetica-Bold",24)
+        self.c.drawString(200,790,"Ficha do Cliente")
+        
+        self.c.setFont("Helvetica-Bold",12)
+        self.c.drawString(50,700,'Codigo:')
+        self.c.drawString(50,670,'Codigo:')
+        self.c.drawString(50,640,'Codigo:')
+        self.c.drawString(50,610,'Codigo:')
+
+        self.c.setFont("Helvetica",12)
+        self.c.drawString(150,700,self.codigorel)
+        self.c.drawString(150,670,self.nomerel)
+        self.c.drawString(150,640,self.telefonerel)
+        self.c.drawString(150,610,self.cidaderel)
+        #im1=cv2.imread('/home/eduardofalcade/Área de Trabalho/download.png')
+        logo = ImageReader('/home/eduardofalcade/Área de Trabalho/download.png')
+        self.c.drawImage(logo,200,200,mask='auto')
+
+        self.c.showPage()
+        self.c.save()
+        self.printCliente()
+
+class funcs():
+    def limpa_cliente(self):
+        self.codigo_entry.delete(0,END)
+        self.nome_entry.delete(0,END)
+        self.telefone_entry.delete(0,END)
+        self.cidade_entry.delete(0,END)
+    def conecta_bd(self):
+        self.conn=sqlite3.connect("clientes.bd")
+        self.cursor=self.conn.cursor()
+        print("conectando ao banco de dados")
+    def desconecta_bd(self):
+        self.conn.close()
+        print("desconectando ao banco de dados")
+    def montaTabelas(self):
+        self.conecta_bd()
+
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cliente(
+                cod INTEGER PRIMARY KEY,
+                nome_cliente CHAR(40) NOT NULL,
+                telefone INTEGER(20),
+                cidade CHAR(40)
+            );
+        """)  
+        self.conn.commit();print("banco de dados criado")
+        self.desconecta_bd()
+    def variaveis(self):
+        self.codigo= self.codigo_entry.get()
+        self.nome= self.nome_entry.get()
+        self.telefone= self.telefone_entry.get()
+        self.cidade= self.cidade_entry.get()
+    def add_clientes(self): 
+        self.variaveis()
+        self.conecta_bd()
+
+        self.cursor.execute("""INSERT INTO cliente(nome_cliente, telefone, cidade)
+            VALUES(?,?,?)""",(self.nome,self.telefone,self.cidade))
+        self.conn.commit()
+        self.desconecta_bd()
+        self.select_lista()
+        self.limpa_cliente()
+    def select_lista(self):
+        self.listaCli.delete(*self.listaCli.get_children())    
+        self.conecta_bd()
+        lista=self.cursor.execute(""" SELECT cod, nome_cliente, telefone,cidade FROM cliente
+            ORDER BY nome_cliente ASC;""")   
+        for i in lista:
+            self.listaCli.insert("", END, values=i)
+        self.desconecta_bd()
+    def onDoubleClick(self, event):
+        self.limpa_cliente()
+        self.listaCli.selection()
+
+        for n in self.listaCli.selection():
+            col1, col2, col3, col4= self.listaCli.item(n, 'values')
+            self.codigo_entry.insert(END, col1)
+            self.nome_entry.insert(END, col2)
+            self.telefone_entry.insert(END, col3)
+            self.cidade_entry.insert(END, col4)
+    def deleta_cliente(self):
+        self.variaveis()
+        self.conecta_bd()
+        self.cursor.execute("""DELETE FROM cliente WHERE cod=?""",(self.codigo,))
+        self.conn.commit()
+        self.desconecta_bd()
+        self.limpa_cliente()
+        self.select_lista()
+    def altera_cliente(self):
+        self.variaveis()
+        self.conecta_bd()
+        self.cursor.execute("""UPDATE cliente SET nome_cliente=?, telefone=?, cidade=?
+                            WHERE cod=?""",(self.nome,self.telefone, self.cidade,self.codigo))
+        self.conn.commit()
+        self.desconecta_bd()
+        self.select_lista()
+        self.limpa_cliente()    
+    def busca_cliente(self):
+        self.conecta_bd()
+        self.listaCli.delete(*self.listaCli.get_children())
+
+        self.nome_entry.insert(END,'%')
+        nome=self.nome_entry.get()
+        self.cursor.execute(
+            """SELECT cod, nome_cliente,telefone,cidade FROM cliente
+            WHERE nome_cliente LIKE '%s' ORDER BY nome_cliente ASC
+            """% nome
+        )
+        buscanomeCli=self.cursor.fetchall()
+        for i in buscanomeCli:
+            self.listaCli.insert("",END,values=i)
+            self.limpa_cliente()
+        self.desconecta_bd()
+    def images_base64(self):
+        pass 
+    def threading_testa_saidas(self):
+        t1=threading.Thread(target=self.testa_saidas)
+        t1.start()
+    def threading_captura_manual(self):
+        global vizualização_liberada
+        vizualização_liberada=True
+        t2=threading.Thread(target=self.captura_manual)
+        t2.start()   
+    def threading_ativa_ciclo(self):
+        global ciclo_iniciado
+        ciclo_iniciado=True
+        t3=threading.Thread(target=self.ativa_ciclo)
+        t3.start() 
+          
+
+#caixas de mensagens 
+    def menssagem_erro(self):
+        messagebox.showerror("ERRO","Falha de Ciclo")
+    def menssagem_alerta_maquina_travada(self):
+        messagebox.showwarning("ALERTA","Maquina Travada")
+    def menssagem_alerta_maquina_liberada(self):
+        messagebox.showwarning("ALERTA","Maquina Liberada")       
+    def menssagem_info_ciclo_iniciado(self):
+        messagebox.showinfo("ALERTA","Ciclo Iniciado")
+    def menssagem_info_ciclo_desligado(self):
+        messagebox.showinfo("ALERTA","Ciclo Desligado")
+    def menssagem_info_imagem_salva(self):
+       messagebox.showinfo("ALERTA","Imagem Padrão Salva")
+    def menssagem_info_imagem_apagada(self):
+       messagebox.showinfo("ALERTA","Imagem Padrão Apagada")
+    def menssagem_info_imagem_nao_cinfugurada(self):
+       messagebox.showinfo("ALERTA","Imagem Padrão Não Configurada")   
+    def menssagem_info_liberar_maquina(self):
+       messagebox.showwarning("ALERTA","Liberar Maquina")
+    def menssagem_info_indicar_operador(self):
+       messagebox.showwarning("ALERTA","Inserir Dados")
+    def menssagem_info_retirar_erros(self):
+       messagebox.showwarning("ALERTA","Apagar Erros")
+    def menssagem_info_desligar_ciclo(self):
+        messagebox.showwarning("ALERTA","Desligar Ciclo Para Continuar")
+    def menssagem_alerta_limite_ultrapassado(self):
+        messagebox.showwarning("ALERTA","Limite de Erro Ultrapassado")  
+
+
+# altera saidas
+    def testa_saidas(self):
+       
+        if maquina_liberada== True:
+            for x in range(10):
+                print("saida1")
+                gpio.output(2,gpio.HIGH)
+                gpio.output(3,gpio.HIGH)
+                gpio.output(4,gpio.HIGH)
+                gpio.output(17,gpio.HIGH)
+                #gpio.output(27,gpio.HIGH)
+                gpio.output(22,gpio.HIGH)
+                time.sleep(0.500)
+                img_buttons1=ligado
+                img_buttons2=ligado
+                img_buttons3=ligado
+                img_buttons4=ligado
+                img_buttons5=ligado
+                img_buttons6=ligado
+                self.bt_saidas1=Label(self.frame_estado_injetora,bd= 6,image=img_buttons1)
+                self.bt_saidas1.place(relx=0.05,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas2=Label(self.frame_estado_injetora,image=img_buttons2)
+                self.bt_saidas2.place(relx=0.15,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas3=Label(self.frame_estado_injetora,image=img_buttons3)
+                self.bt_saidas3.place(relx=0.25,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas4=Label(self.frame_estado_injetora,image=img_buttons4)
+                self.bt_saidas4.place(relx=0.35,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas5=Label(self.frame_estado_injetora,image=img_buttons5)
+                self.bt_saidas5.place(relx=0.45,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas6=Label(self.frame_estado_injetora,image=img_buttons6)
+                self.bt_saidas6.place(relx=0.55,rely=0.6, relwidth=0.05,relheight=0.15)
+                gpio.output(3,gpio.LOW)
+                gpio.output(4,gpio.LOW)
+                gpio.output(17,gpio.LOW)
+                #gpio.output(27,gpio.LOW)
+                gpio.output(22,gpio.LOW)
+                time.sleep(0.500)
+                img_buttons1=desligado
+                img_buttons2=desligado
+                img_buttons3=desligado
+                img_buttons4=desligado
+                img_buttons5=desligado
+                img_buttons6=desligado
+                self.bt_saidas1=Label(self.frame_estado_injetora,bd= 6,image=img_buttons1)
+                self.bt_saidas1.place(relx=0.05,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas2=Label(self.frame_estado_injetora,image=img_buttons2)
+                self.bt_saidas2.place(relx=0.15,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas3=Label(self.frame_estado_injetora,image=img_buttons3)
+                self.bt_saidas3.place(relx=0.25,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas4=Label(self.frame_estado_injetora,image=img_buttons4)
+                self.bt_saidas4.place(relx=0.35,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas5=Label(self.frame_estado_injetora,image=img_buttons5)
+                self.bt_saidas5.place(relx=0.45,rely=0.6, relwidth=0.05,relheight=0.15)
+                self.bt_saidas6=Label(self.frame_estado_injetora,image=img_buttons6)
+                self.bt_saidas6.place(relx=0.55,rely=0.6, relwidth=0.05,relheight=0.15)
+ 
+    def libera_maquina(self):
+        global maquina_liberada
+        global vizualização_liberada
+        if maquina_liberada==False:    
+            time.sleep(0.100)
+            gpio.output(2,gpio.LOW)
+            gpio.output(3,gpio.LOW)
+            gpio.output(4,gpio.LOW)
+            gpio.output(17,gpio.LOW)
+            #gpio.output(27,gpio.LOW)
+            gpio.output(22,gpio.LOW)
+            time.sleep(0.100)
+            
+            self.lb_indicador_injetora=Label(self.frame_estado_injetora,bg='green', text="Injetora Liberada")
+            self.lb_indicador_injetora.place(relx=0,rely=0.9, relwidth=1,relheight=0.1)
+            img_buttons1=ligado
+            img_buttons2=ligado
+            img_buttons3=ligado
+            img_buttons4=ligado
+            img_buttons5=ligado
+            img_buttons6=ligado
+            
+            self.bt_saidas1.configure(image=img_buttons1)
+            self.bt_saidas2.configure(image=img_buttons2)
+            self.bt_saidas3.configure(image=img_buttons3)
+            self.bt_saidas4.configure(image=img_buttons4)
+            self.bt_saidas5.configure(image=img_buttons5)
+            self.bt_saidas6.configure(image=img_buttons6)
+           
+            
+            self.menssagem_alerta_maquina_liberada()
+            maquina_liberada=True
+            vizualização_liberada=True
+        
+    def trava_maquina(self):
+        global maquina_liberada
+        if maquina_liberada==True:
+            time.sleep(0.100)
+            gpio.output(2,gpio.HIGH)
+            gpio.output(3,gpio.HIGH)
+            gpio.output(4,gpio.HIGH)
+            gpio.output(17,gpio.HIGH)
+            #gpio.output(27,gpio.HIGH)
+            gpio.output(22,gpio.HIGH)
+            time.sleep(0.100)
+            
+            
+            self.lb_indicador_injetora=Label(self.frame_estado_injetora,bg='red', text="injetora Travada")
+            self.lb_indicador_injetora.place(relx=0,rely=0.9, relwidth=1,relheight=0.1)
+            img_buttons1=desligado
+            img_buttons2=desligado
+            img_buttons3=desligado
+            img_buttons4=desligado
+            img_buttons5=desligado
+            img_buttons6=desligado
+
+            self.bt_saidas1.configure(image=img_buttons1)
+            self.bt_saidas2.configure(image=img_buttons2)
+            self.bt_saidas3.configure(image=img_buttons3)
+            self.bt_saidas4.configure(image=img_buttons4)
+            self.bt_saidas5.configure(image=img_buttons5)
+            self.bt_saidas6.configure(image=img_buttons6)
+            self.menssagem_alerta_maquina_travada()
+            maquina_liberada=False
+                 
+    def update_entradas(self):
+        
+        global img_button1 
+        global img_button2 
+        global img_button3 
+        global img_button4 
+        global img_button5 
+        global img_button6 
+        global img_button7 
+        global img_button8
+        if gpio.input(16)==gpio.HIGH:
+            self.bt_entradas1.config(image=ligado)
+            print('ligado')
+        elif gpio.input(16)==gpio.LOW:
+            self.bt_entradas1.config(image=desligado)
+            print('desligado')  
+
+        if gpio.input(20)==gpio.HIGH:
+            self.bt_entradas2.config(image=ligado)
+            print('ligado')
+        elif gpio.input(20)==gpio.LOW:
+            self.bt_entradas2.config(image=desligado)
+            print('desligado')  
+
+        if gpio.input(21)==gpio.HIGH:
+            self.bt_entradas3.config(image=ligado)
+            print('ligado')
+        elif gpio.input(21)==gpio.LOW:
+            self.bt_entradas3.config(image=desligado)
+            print('desligado')  
+
+        if gpio.input(14)==gpio.HIGH:
+            self.bt_entradas4.config(image=ligado)
+            print('ligado')
+        elif gpio.input(14)==gpio.LOW:
+            self.bt_entradas4.config(image=desligado)
+            print('desligado')  
+
+        if gpio.input(15)==gpio.HIGH:
+            self.bt_entradas5.config(image=ligado)
+            print('ligado')
+        elif gpio.input(15)==gpio.LOW:
+            self.bt_entradas5.config(image=desligado)
+            print('desligado')  
+
+        if gpio.input(18)==gpio.HIGH:
+            self.bt_entradas6.config(image=ligado)
+            print('ligado')
+        elif gpio.input(18)==gpio.LOW:
+            self.bt_entradas6.config(image=desligado)
+            print('desligado')  
+
+        if gpio.input(23)==gpio.HIGH:
+            self.bt_entradas7.config(image=ligado)
+            print('ligado')
+        elif gpio.input(23)==gpio.LOW:
+            self.bt_entradas7.config(image=desligado)
+            print('desligado')  
+
+        if gpio.input(24)==gpio.HIGH:
+            self.bt_entradas8.config(image=ligado)
+            print('ligado')
+        elif gpio.input(24)==gpio.LOW:
+            self.bt_entradas8.config(image=desligado)
+            print('desligado')  
+
+    def update_saidas(self):
+        print('update')
+        """
+        if gpio.output(2,1)==gpio.output(2,1):
+            self.bt_saidas1.config(image=ligado)
+            print('ligado')
+        elif gpio.output(2,0)==gpio.output(2,0):
+            self.bt_saidas1.config(image=desligado)
+            print('desligado') 
+
+        if gpio.output(3)==gpio.HIGH:
+            self.bt_saidas2.config(image=ligado)
+            print('ligado')
+        elif gpio.output(3)==gpio.LOW:
+            self.bt_saidas2.config(image=desligado)
+            print('desligado') 
+
+        if gpio.output(4)==gpio.HIGH:
+            self.bt_saidas3.config(image=ligado)
+            print('ligado')
+        elif gpio.output(4)==gpio.LOW:
+            self.bt_saidas3.config(image=desligado)
+            print('desligado')
+
+        if gpio.output(17)==gpio.HIGH:
+            self.bt_saidas4.config(image=ligado)
+            print('ligado')
+        elif gpio.output(17)==gpio.LOW:
+            self.bt_saidas4.config(image=desligado)
+            print('desligado') 
+            
+        if gpio.output(27)==gpio.HIGH:
+            self.bt_saidas5.config(image=ligado)
+            print('ligado')
+        elif gpio.output(27)==gpio.LOW:
+            self.bt_saidas5.config(image=desligado)
+            print('desligado') 
+
+        if gpio.output(22)==gpio.HIGH:
+            self.bt_saidas5.config(image=ligado)
+            print('ligado')
+        elif gpio.output(22)==gpio.LOW:
+            self.bt_saidas5.config(image=desligado)
+            print('desligado') 
+         """
+
+    def captura_manual(self):
+        global img_salva_referencia
+        global img_paremetro_ciclo_atual
+        global img_parametro_ciclo_atual_normalizada
+        global img_ciclo_comparação
+        global img_ciclo_registro_feito
+        global img_ciclo_diferencas
+        
+
+        global img_resize_padrao
+        global img_resize_comparação
+        global img_resize_registro_feito
+        global img_resize_diferencas
+
+        global imgtk_padrao
+
+        global maquina_liberada
+        global ciclo_iniciado
+        global erro
+        global padrão_configurado
+        global grava_padrão
+        global vizualização_liberada
+
+        global blur
+        global abertura
+        global kernel
+        
+        global numero_circulos_padrao
+        global numero_circulos_padrao2
+
+        global min_raio
+        global max_raio
+
+        global min_raio2
+        global max_raio2
+
+        global limite_erro
+
+        global escala
+
+        grava_padrão=False
+        blank_image = np.zeros(shape=[1600, 1200, 3], dtype=np.uint8)
+        blank_image.fill(255)
+        a=10
+        b=10
+        
+        color = (255, 0, 0)
+        thickness = 12
+        gpio.output(22,gpio.LOW)
+        
+        
+
+        if vizualização_liberada==True and erro==False and maquina_liberada==True and ciclo_iniciado==False:
+            
+            
+            while erro==False and maquina_liberada==True:
+                blur=int(self.nome_spinbox_blur.get())
+
+                min_raio=int(self.nome_spinbox_min_raio.get())
+                max_raio=int(self.nome_spinbox_max_raio.get())
+
+                min_raio2=int(self.nome_spinbox_min_raio_extrator.get())
+                max_raio2=int(self.nome_spinbox_max_raio_extrator.get())
+
+                limite_erro=float(self.nome_spinbox_por_erro.get())
+
+                if max_raio >min_raio:
+                    max_raio=max_raio
+                else:
+                    max_raio=min_raio+10
+
+                if max_raio2 >min_raio2:
+                    max_raio2=max_raio2
+                else:
+                    max_raio2=min_raio2+10
+                
+                if min_raio <=0:
+                    min_raio=0
+                else:
+                    min_raio=min_raio
+
+                if min_raio2 <=0:
+                    min_raio2=0
+                else:
+                    min_raio2=min_raio2
+                
+                if limite_erro <=0:
+                    limite_erro=0
+                else:
+                    limite_erro=limite_erro
+
+                
+                
+                check,frame= video.read()
+
+                #frame=cv2.rotate(frame,cv2.ROTATE_90_COUNTERCLOCKWISE)
+                frame=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+
+                image = frame.copy()
+                
+                height, width = image.shape
+                
+                New_Number1 = int(width/escala)
+                New_Number2 = int(height/escala)
+                down_width = New_Number1
+                down_height = New_Number2
+                down_points =(down_width, down_height)
+                blank_image.fill(255)
+                
+                img_visualiza= cv2.blur(image, (blur,blur),cv2.BORDER_ISOLATED)
+                img_visualiza= cv2.erode(img_visualiza,kernel,iterations = 1)
+                img_visualiza= cv2.dilate(img_visualiza,kernel,iterations = 1)
+                #img_visualiza=cv2.adaptiveThreshold(img_visualiza,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11, 4)
+                
+                #img_visualiza = cv2.Canny(img_visualiza,100,200)
+                
+                numero_circulos_padrao=0
+                numero_circulos_padrao2=0
+
+                img_hough=img_visualiza.copy()
+                detected_circles = cv2.HoughCircles(img_hough,cv2.HOUGH_GRADIENT, 1, 200, param1 = 50,param2 = 30, minRadius = min_raio, maxRadius = max_raio)
+                detected_circles2 = cv2.HoughCircles(img_hough,cv2.HOUGH_GRADIENT, 1, 200, param1 = 50,param2 = 30, minRadius = min_raio2, maxRadius =max_raio2)
+               
+                #contours1, hierarchy1 = cv2.findContours(img_hough,mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_NONE)
+               
+
+# draw contours on the original image
+                img_hough=cv2.cvtColor(img_hough, cv2.COLOR_GRAY2BGR)
+
+                #cv2.drawContours(img_hough, contours=contours1, contourIdx=-1, color=(0,255,0), thickness=1, lineType=cv2.LINE_8)
+                #areas=[]
+                #cont_area=0
+                #for cnt in contours1:
+                #    cont_area_atual=cv2.contourArea(cnt)
+                #    if cont_area_atual>cont_area:
+                #        cont_area=cont_area_atual
+                    #areas.append(cont_area)
+                #print(len(contours1))
+                #print("area do contorno é:",cont_area)
+                
+                if detected_circles is not None:
+
+		# Convert the circle parameters a, b and r to integers.
+                    detected_circles = np.uint16(np.around(detected_circles))
+                    
+                    #img_hough=cv2.cvtColor(img_hough, cv2.COLOR_GRAY2BGR)
+                    for pt in detected_circles[0, :]:
+                        a, b, r = pt[0], pt[1], pt[2]
+
+                        # Draw the circumference of the circle.
+                        
+                        cv2.circle(img_hough, (a, b), r, (255, 0, 0), 20)
+
+                        # Draw a small circle (of radius 1) to show the center.
+                        cv2.circle(img_hough, (a, b), 1, (255, 0, 0), 100)
+                        numero_circulos_padrao=numero_circulos_padrao+1
+                if detected_circles2 is not None:
+
+		# Convert the circle parameters a, b and r to integers.
+                    detected_circles2 = np.uint16(np.around(detected_circles2))
+                    
+                    #img_hough=cv2.cvtColor(img_hough, cv2.COLOR_GRAY2BGR)
+                    for pt2 in detected_circles2[0, :]:
+                        a2, b2, r2 = pt2[0], pt2[1], pt2[2]
+
+                        # Draw the circumference of the circle.
+                        
+                        cv2.circle(img_hough, (a2, b2), r2, (0, 0, 255), 10)
+
+                        # Draw a small circle (of radius 1) to show the center.
+                        cv2.circle(img_hough, (a2, b2), 1, (0, 0, 255), 10)
+                        numero_circulos_padrao2=numero_circulos_padrao2+1
+                
+                
+                       
+                #img=img_visualiza
+                img_hough = cv2.rectangle(img_hough, (0,0), (1600,1200), color, thickness)
+                #cv2.imshow("1",img_hough)
+                img_resize_visualiza = cv2.resize(img_hough, down_points, interpolation= cv2.INTER_LINEAR_EXACT)
+                
+                im_padrao= Image.fromarray(img_resize_visualiza)
+                imgtk_padrao= ImageTk.PhotoImage(image=im_padrao) 
+                self.lb_imagem_padrao.configure(image=imgtk_padrao)
+                #   print(len(contours1))
+                cv2.waitKey(1)
+
+                if vizualização_liberada==False:
+                    
+                    self.lb_imagem1.configure(text="AGUARDANDO IMAGEM PADRÃO")
+                    break
+
+                elif grava_padrão==True:
+                    img_salva_referencia=frame
+                    img_salva_referencia = cv2.blur(img_salva_referencia, (blur,blur),cv2.BORDER_ISOLATED)
+                    #img_salva_referencia= cv2.erode(img_salva_referencia,kernel,iterations = 1)
+                    #img_salva_referencia= cv2.dilate(img_salva_referencia,kernel,iterations = 1)
+                    #img_salva_referencia=cv2.adaptiveThreshold(img_salva_referencia,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11, 4)
+                    #img_salva_referencia= cv2.morphologyEx(img_salva_referencia, cv2.MORPH_OPEN,kernel)
+                    #img_salva_referencia = cv2.Canny(img_salva_referencia,100,200)
+                    data_time= str(datetime.datetime.now())
+                    img_name="/home/pi/Desktop/pasta_imagens_padrao/imagem_padrao_{}.png".format(data_time)
+                    cv2.imwrite(img_name,img_salva_referencia)
+                    
+                    
+                    img_resize_padrao = cv2.resize(img_salva_referencia, down_points, interpolation= cv2.INTER_LINEAR_EXACT)
+                    im_padrao= Image.fromarray(img_resize_padrao)
+                    imgtk_padrao= ImageTk.PhotoImage(image=im_padrao) 
+                    self.lb_imagem_padrao.configure(image=imgtk_padrao)
+                    #wimg_salva_referencia=cv2.Canny(img_salva_referencia,125,175)
+                    
+                    padrão_configurado=True
+                    self.menssagem_info_imagem_salva()
+                    print('imagemsalva')
+                    break
+        elif vizualização_liberada==False:
+            self.menssagem_alerta_maquina_travada()
+            
+       
+        elif erro==True:
+            self.menssagem_erro()
+        
+        elif maquina_liberada==False:
+            self.menssagem_alerta_maquina_travada()
+
+        elif ciclo_iniciado==True:
+            self.menssagem_info_desligar_ciclo()
+        print(maquina_liberada)
+        print(vizualização_liberada)
+        gpio.output(22,gpio.HIGH)
+        cv2.destroyAllWindows() 
+
+    def para_captura_manual(self):
+        global vizualização_liberada
+
+        vizualização_liberada=False
+        for x in range(100):
+            self.lb_imagem_padrao.configure(image=img_vazia)
+        #self.lb_imagem11=Label(self.frame_imagens,bd= 6,bg='#4F4F4F', text="AGUARDANDO IMAGEM PADRÃO")
+        #self.lb_imagem11.place(relx=0,rely=0, relwidth=0.49,relheight=0.1)
+
+   
+    
+    def ativa_ciclo(self):
+        global ciclo_iniciado
+        global grava_padrão
+        global imgtk_padrao
+        global escala
+        global img_salva_referencia
+        global padrão_configurado
+
+        global emergencia
+
+        global blur
+        global abertura
+        global kernel
+        
+        global numero_circulos_padrao
+        global numero_circulos_padrao2
+
+        global min_raio
+        global max_raio
+
+        global min_raio2
+        global max_raio2
+
+        global escala
+
+        global limite_erro
+
+        captura_feita=False
+        abertura_feita=True
+        score=1
+
+        gpio.output(2,gpio.HIGH)
+        gpio.output(3,gpio.HIGH)
+        gpio.output(4,gpio.HIGH)
+        gpio.output(17,gpio.HIGH)
+        #gpio.output(27,gpio.HIGH)
+        gpio.output(22,gpio.HIGH)
+        
+            
+        self.bt_saidas1.configure(image=desligado)
+        self.bt_saidas2.configure(image=desligado)
+        self.bt_saidas3.configure(image=desligado)
+        self.bt_saidas4.configure(image=desligado)
+        self.bt_saidas5.configure(image=desligado)
+        self.bt_saidas6.configure(image=desligado)
+
+        emergencia=True
+        
+       
+        while ciclo_iniciado==True and padrão_configurado==True and emergencia==True:
+            self.lb_indicador_ciclo.configure(bg='#FFA500', text="Ciclo Ligado")
+            check,frame= video.read()
+            if gpio.input(24)==gpio.LOW:
+                gpio.output(22,gpio.LOW)
+                #gpio.output(27,gpio.LOW)
+                self.bt_saidas4.configure(image=ligado)
+                self.bt_saidas5.configure(image=ligado)
+            elif gpio.input(24)==gpio.HIGH:
+                gpio.output(22,gpio.HIGH)
+                #gpio.output(27,gpio.HIGH)
+                emergencia=False
+
+            if limite_erro>=score:
+
+                data_time= str(datetime.datetime.now())
+                img_name="/home/pi/Desktop/pasta_imagens_erro/imagem_erro_{}.png".format(data_time)
+                cv2.imwrite(img_name,frame) 
+
+                #emergencia=False
+                #ciclo_iniciado=False
+                #self.lb_imagem_comparacao.configure(image=img_vazia)
+                #self.lb_imagem_comparada.configure(image=img_vazia)
+                #self.lb_imagem_diferenca.configure(image=img_vazia)
+                #self.menssagem_alerta_limite_ultrapassado()
+                #self.desativa_ciclo()
+                #self.erro_ativo()
+                #print("errooo")
+
+            if  gpio.input(18)==gpio.HIGH:
+                abertura_feita=True
+            
+            
+            if  captura_feita==False and gpio.input(23)==gpio.HIGH and abertura_feita==True:
+                captura_feita=True
+                #abertura_feita=False
+                
+                for i in range(1):
+                    #check,frame= video.read()
+                    #frame=cv2.rotate(frame,cv2.ROTATE_90_COUNTERCLOCKWISE)
+                    frame=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+                    image = frame
+                    #img_ciclo_comparação= cv2.morphologyEx(image, cv2.MORPH_OPEN,kernel)
+                    img_ciclo_comparação = cv2.blur(image, (blur,blur),cv2.BORDER_ISOLATED)
+                    img_ciclo_comparação= cv2.erode(img_ciclo_comparação,kernel,iterations = 1)
+                    img_ciclo_comparação= cv2.dilate(img_ciclo_comparação,kernel,iterations = 1)
+                    #img_ciclo_comparação=cv2.adaptiveThreshold(img_ciclo_comparação,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11, 4)
+                    data_time= str(datetime.datetime.now())
+                    img_name="/home/pi/Desktop/pasta_imagens_ciclo_base/imagem_ciclo_base_{}.png".format(data_time)
+                    cv2.imwrite(img_name,img_ciclo_comparação)
+                    
+                    #img_ciclo_comparação = cv2.Canny(img_ciclo_comparação,100,200)
+
+## EXIBE IMAGEM COMPARAÇÃO 
+                    img_hough_comparação=img_ciclo_comparação.copy()
+                    detected_circles_ciclo = cv2.HoughCircles(img_hough_comparação,cv2.HOUGH_GRADIENT, 1, 200, param1 = 50,param2 = 30, minRadius = min_raio, maxRadius = max_raio)
+                    detected_circles_ciclo2 = cv2.HoughCircles(img_hough_comparação,cv2.HOUGH_GRADIENT, 1, 50, param1 = 50,param2 = 30, minRadius = min_raio2, maxRadius =max_raio2)
+                    #contours3, hierarchy1 = cv2.findContours(img_hough_comparação,mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_NONE)
+                    
+# draw contours on the original image
+                    img_hough_comparação=cv2.cvtColor(img_hough_comparação, cv2.COLOR_GRAY2BGR)
+                    #cv2.drawContours(img_hough_comparação, contours=contours3, contourIdx=-1, color=(0,255,0), thickness=1, lineType=cv2.LINE_8)
+                    #areas=[]
+                    #cont_area=0
+                    #for cnt in contours3:
+                    #    cont_area_atual=cv2.contourArea(cnt)
+                    #    if cont_area_atual>cont_area:
+                    #        cont_area=cont_area_atual
+                    #areas.append(cont_area)
+                    numero_circulos_ciclo=0
+                    numero_circulos_ciclo2=0
+                
+                    if detected_circles_ciclo is not None:
+		                # Convert the circle parameters a, b and r to integers.
+                        detected_circles_ciclo = np.uint16(np.around(detected_circles_ciclo))
+                        #img_hough=cv2.cvtColor(img_hough, cv2.COLOR_GRAY2BGR)
+                        for pt3 in detected_circles_ciclo[0, :]:
+                            a3, b3, r3 = pt3[0], pt3[1], pt3[2]
+                        # Draw the circumference of the circle.
+                            cv2.circle(img_hough_comparação, (a3, b3), r3, (255, 0, 0), 20)
+                        # Draw a small circle (of radius 1) to show the center.
+                            cv2.circle(img_hough_comparação, (a3, b3), 1, (255, 0, 0), 100)
+                            numero_circulos_ciclo=numero_circulos_ciclo+1
+
+                    if detected_circles_ciclo2 is not None:
+		                # Convert the circle parameters a, b and r to integers.
+                        detected_circles_ciclo2 = np.uint16(np.around(detected_circles_ciclo2))
+                        #img_hough=cv2.cvtColor(img_hough, cv2.COLOR_GRAY2BGR)
+                        for pt4 in detected_circles_ciclo2[0, :]:
+                            a4, b4, r4 = pt4[0], pt4[1], pt4[2]
+                        # Draw the circumference of the circle.
+                            cv2.circle(img_hough_comparação, (a4, b4), r4, (0, 0, 255), 10)
+                        # Draw a small circle (of radius 1) to show the center.
+                            cv2.circle(img_hough_comparação, (a4, b4), 1, (0, 0, 255), 10)
+                            numero_circulos_ciclo2=numero_circulos_ciclo2+1
+
+                    
+                    # let's downscale the image using new  width and height
+                    height, width = image.shape    
+                    New_Number1 = int(width/escala)
+                    New_Number2 = int(height/escala)
+                    down_width = New_Number1
+                    down_height = New_Number2
+                    down_points = (down_width, down_height)
+                    img_resize_comparacao= cv2.resize(img_hough_comparação, down_points, interpolation= cv2.INTER_LINEAR_EXACT)  
+                    im_comparacao= Image.fromarray(img_resize_comparacao)
+                    imgtk_comparação= ImageTk.PhotoImage(image=im_comparacao)
+                    self.lb_imagem_comparacao.configure(image=imgtk_comparação)
+
+
+## EXIBE IMAGEM SUBTRAÇÃO
+
+                    img_subtracao=cv2.subtract(img_ciclo_comparação,img_salva_referencia)
+
+                    data_time= str(datetime.datetime.now())
+                    img_name="/home/pi/Desktop/pasta_imagens_ciclo_subtração_normal/imagem_ciclo_subtração_normal_{}.png".format(data_time)
+                    cv2.imwrite(img_name,img_subtracao) 
+
+                    #img_subtracao=cv2.adaptiveThreshold(img_subtracao,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11, 4) 
+
+                    contours6, hierarchy1 = cv2.findContours(img_subtracao,mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_NONE)
+               
+
+# draw contours on the original image
+                    img_subtracao=cv2.cvtColor(img_subtracao, cv2.COLOR_GRAY2BGR)
+                    cv2.drawContours(img_subtracao, contours=contours6, contourIdx=-1, color=(0,0, 255), thickness=2, lineType=cv2.LINE_8)
+                    cont_area=0
+                    for cnt in contours6:
+                        cont_area_atual=cv2.contourArea(cnt)
+                        if cont_area_atual>cont_area:
+                            cont_area=cont_area_atual
+                    #areas.append(cont_area)
+                    #print(len(contours6))
+                    #print("area do contorno é:",cont_area)
+                    
+                    
+                    #cv2.imshow('1',img_subtracao)
+                    imgtk_subtracao= cv2.resize(img_subtracao, down_points, interpolation= cv2.INTER_LINEAR_EXACT)
+                        
+                    imgtk_subtracao= Image.fromarray(imgtk_subtracao)
+                    imgtk_subtracao= ImageTk.PhotoImage(image=imgtk_subtracao)
+                    self.lb_imagem_comparada.configure(image=imgtk_subtracao)
+
+                    # Convert to grayscale.
+                    img1_color = img_ciclo_comparação
+                    img2_color =img_salva_referencia
+
+                    # Convert to grayscale.
+                    img1 = img1_color 
+                    img2 = img2_color
+                    height, width = img2.shape
+
+                    # Create ORB detector with 5000 features.
+                    orb_detector = cv2.ORB_create(5000)
+
+                    # Find keypoints and descriptors.
+                    # The first arg is the image, second arg is the mask
+                    # (which is not required in this case).
+                    kp1, d1 = orb_detector.detectAndCompute(img1, None)
+                    kp2, d2 = orb_detector.detectAndCompute(img2, None)
+
+                    # Match features between the two images.
+                    # We create a Brute Force matcher with
+                    # Hamming distance as measurement mode.
+                    matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck = True)
+
+                    # Match the two sets of descriptors.
+                    matches = matcher.match(d1, d2)
+
+                    # Sort matches on the basis of their Hamming distance.
+                    matches.sort(key = lambda x: x.distance)
+
+                    # Take the top 90 % matches forward.
+                    matches = matches[:int(len(matches)*0.9)]
+                    no_of_matches = len(matches)
+
+                    # Define empty matrices of shape no_of_matches * 2.
+                    p1 = np.zeros((no_of_matches, 2))
+                    p2 = np.zeros((no_of_matches, 2))
+
+                    for i in range(len(matches)):
+                        p1[i, :] = kp1[matches[i].queryIdx].pt
+                        p2[i, :] = kp2[matches[i].trainIdx].pt
+
+                    # Find the homography matrix.
+                    homography, mask = cv2.findHomography(p1, p2, cv2.RANSAC)
+
+                    # Use this matrix to transform the
+                    # colored image wrt the reference image.
+                    transformed_img = cv2.warpPerspective(img1_color,
+                                        homography, (width, height))
+
+                    # Save the output.
+
+                    
+                    
+
+
+                    
+                    
+                    (score, diff) = ssim(img_salva_referencia, transformed_img, full=True)
+                    diff = (diff * 255).astype("uint8")
+
+                    img_subtracao=cv2.subtract(img_salva_referencia,img_ciclo_comparação) 
+
+                    print("score",score)
+                    print("limite erro",limite_erro)
+                    
+                    #(score2, diff2) = ssim(img_salva_referencia,img_ciclo_comparação, full=True)
+                    #diff2= (diff2 * 255).astype("uint8")
+                
+                    # 6. You can print only the score if you want
+                   
+                    self.bt_nivel_igualdade_numero.configure(text=score)
+                    #self.bt_nivel_igualdade_contorno.configure(text=score2)
+                    
+                    
+                    img_subtracao_registro=cv2.subtract(transformed_img,img_salva_referencia) 
+
+                    data_time= str(datetime.datetime.now())
+                    img_name="/home/pi/Desktop/pasta_imagens_ciclo_subtração_registro/imagem_ciclo_subtração_registro_{}.png".format(data_time)
+                    cv2.imwrite(img_name,img_subtracao_registro) 
+                    
+                    img_hough_subtração_comparação= img_subtracao_registro.copy()
+                    #img_hough_subtração_comparação= cv2.blur( img_hough_subtração_comparação, (blur,blur),cv2.BORDER_ISOLATED)
+                    #img_hough_subtração_comparação= cv2.erode(img_hough_subtração_comparação,kernel,iterations = 1)
+                    img_hough_subtração_comparação= cv2.dilate(img_hough_subtração_comparação,kernel,iterations = 1)
+                    
+                    contours4, hierarchy1 = cv2.findContours(img_hough_subtração_comparação,mode=cv2.RETR_TREE, method=cv2.CHAIN_APPROX_NONE)
+
+# draw contours on the original image
+                    img_hough_subtração_comparação= cv2.blur( img_hough_subtração_comparação, (blur,blur),cv2.BORDER_ISOLATED)
+
+                    img_hough_subtração_comparação=cv2.cvtColor(img_hough_subtração_comparação, cv2.COLOR_GRAY2BGR)
+                    cv2.drawContours(img_hough_subtração_comparação, contours=contours4, contourIdx=-1, color=(0,0,255), thickness=1, lineType=cv2.LINE_8)
+                    #areas=[]
+                    cont_area=0
+                    for cnt in contours4:
+                        cont_area_atual=cv2.contourArea(cnt)
+                        if cont_area_atual>cont_area:
+                            cont_area=cont_area_atual
+                    #areas.append(cont_area)
+
+                    self.bt_nivel_igualdade_contorno.configure(text= cont_area)
+                    
+                
+                    #cv2.imshow('registrofeito',img_hough_subtração_comparação)
+                    #cv2.waitKey(0)
+                    imgtk_contorno= cv2.resize(img_hough_subtração_comparação, down_points, interpolation= cv2.INTER_LINEAR_EXACT)   
+                    imgtk_contorno= Image.fromarray(imgtk_contorno)
+                    imgtk_contorno= ImageTk.PhotoImage(image=imgtk_contorno)
+
+                    self.lb_imagem_diferenca.configure(image=imgtk_contorno)
+                    #cv2.destroyAllWindows() 
+                    #cv2.waitKey(0)
+            elif captura_feita==True and gpio.input(23)==gpio.LOW : 
+                captura_feita=False
+
+            
+            
+        
+
+        if padrão_configurado==False:
+            self.menssagem_info_imagem_nao_cinfugurada()
+            ciclo_iniciado=False
+        
+        elif ciclo_iniciado==False:
+            self.lb_imagem_comparacao.configure(image=img_vazia)
+            self.lb_imagem_comparada.configure(image=img_vazia)
+            self.lb_imagem_diferenca.configure(image=img_vazia)
+            self.desativa_ciclo()
+            #self.menssagem_info_ciclo_desligado()
+        
+        elif emergencia==False:
+            emergencia=False
+            ciclo_iniciado=False
+            self.lb_imagem_comparacao.configure(image=img_vazia)
+            self.lb_imagem_comparada.configure(image=img_vazia)
+            self.lb_imagem_diferenca.configure(image=img_vazia)
+            self.desativa_ciclo()
+            self.erro_ativo()
+
+
+            
+            
+            
+
+            
+        cv2.destroyAllWindows()
+   
+    def desativa_ciclo(self):
+        global ciclo_iniciado
+        global grava_padrão
+        global erro
+        x=0
+        for x in range(10):
+            ciclo_iniciado=False
+            grava_padrão=False
+            self.lb_indicador_ciclo.configure(text="Ciclo Desligado",bd= 6,bg='#0000FF')
+        self.trava_maquina()
+
+    def apaga_erros(self):
+        global erro
+        global maquina_liberada
+        global vizualização_liberada
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Sem Erros")
+        self.bt_buscar.place(relx=0.05,rely=0.5, relwidth=0.9,relheight=0.15) 
+        erro=False
+        maquina_liberada=True
+        vizualização_liberada=True  
+
+    def erro_ativo(self):
+        global erro
+        global maquina_liberada
+        global emergencia
+        self.bt_buscar=Button(self.frame_botoes_manuais,bg="red",text="Apagar Erros",command=self.apaga_erros)
+        self.bt_buscar.place(relx=0.05,rely=0.5, relwidth=0.9,relheight=0.15)
+        erro=True
+        emergencia=False
+        self.trava_maquina()
+        self.menssagem_erro()
+             
+    def grava_imagem_padrão(self):
+        global grava_padrão
+        grava_padrão=True
+
+    def apaga_imagem_padrão(self):
+        global grava_padrão
+        grava_padrão=False
+        global padrão_configurado
+        padrão_configurado=False
+        self.lb_imagem_padrao.configure(image=img_vazia)
+        self.menssagem_info_imagem_apagada()
+
+    def normaliza_imagem_referencia(self):
+        global img_parametro_ciclo_atual_normalizada
+        global img_salva_referencia
+        img_parametro_ciclo_atual_normalizada=cv2.cvtColor(img_salva_referencia,cv2.COLOR_BGR2GRAY)
+   
+    def normaliza_imagem_comparacao(self):
+        global frame_comparacao
+        frame_comparacao=cv2.cvtColor(frame_comparacao,cv2.COLOR_BGR2GRAY)
+
+    def aplica_registro(self):
+        global frame_comparacao
+        global img_parametro_ciclo_atual_normalizada
+        global img_registro_ciclo
+        
+        
+
+class application(funcs,relatorios):
+    
+    def __init__(self):
+        global maquina_liberada
+        self.root= root
+        self.tela()
+        self.frames()
+        self.criando_botoes()
+        self.criando_entradas()
+        self.criando_indicadores()
+        self.criando_imagens_padrão()
+        self.lista_fram_2()
+        self.montaTabelas()
+        self.select_lista()
+        self.menus()
+        self.menssagem_alerta_maquina_liberada()
+        self.erro_ativo()
+        root.mainloop()
+            
+    def tela(self):
+        self.root.title("CADASTRO DE MOLDES")
+        self.root.configure(background= '#1C1C1C')
+        self.root.geometry("1920x980")
+        self.root.resizable(True, True)
+        
+    def frames(self):
+        self.frame_dados_operador = Frame(self.root, bd = 4, bg = '#363636',highlightbackground= 'black', highlightthickness=3 )
+        self.frame_dados_operador.place(relx= 0.02 , rely=0.02, relwidth= 0.48,relheight= 0.25)
+
+        self.frame_2 = Frame(self.root, bd=4, bg='#363636',highlightbackground='black', highlightthickness=3)
+        self.frame_2.place(relx=0.02, rely=0.75, relwidth=0.48, relheight=0.23)
+    
+        self.frame_botoes_manuais = Frame(self.root, bd = 4, bg = '#363636',highlightbackground= 'black', highlightthickness=3 )
+        self.frame_botoes_manuais.place(relx= 0.02 , rely=0.27, relwidth= 0.48,relheight= 0.25)
+
+        self.frame_estado_injetora = Frame(self.root, bd = 4, bg = '#363636',highlightbackground= 'black', highlightthickness=3 )
+        self.frame_estado_injetora .place(relx= 0.02 , rely=0.50, relwidth= 0.48,relheight= 0.25)
+
+        self.frame_imagens= Frame(self.root, bd = 4, bg = '#363636',highlightbackground= 'black', highlightthickness=3 )
+        self.frame_imagens.place(relx= 0.50 , rely=0.02, relwidth= 0.48,relheight= 0.96)
+
+    def criando_entradas(self):
+       
+        self.lb_nome=Label(self.frame_dados_operador, text="Nome do Operador: ")
+        self.lb_nome.place(relx=0.05,rely=0.05, relwidth=0.20,relheight=0.1)
+
+        self.nome_operador_entry=Entry(self.frame_dados_operador)
+        self.nome_operador_entry.place(relx=0.05,rely=0.15, relwidth=0.5,relheight=0.15)
+
+        self.lb_nome=Label(self.frame_dados_operador, text="Nome da Matriz: ")
+        self.lb_nome.place(relx=0.05,rely=0.40, relwidth=0.20,relheight=0.1)
+
+        self.nome_matriz_entry=Entry(self.frame_dados_operador)
+        self.nome_matriz_entry.place(relx=0.05,rely=0.50, relwidth=0.5,relheight=0.15)
+
+        self.lb_nome=Label(self.frame_dados_operador, text="Taxa de Blur: ")
+        self.lb_nome.place(relx=0.60,rely=0.05, relwidth=0.20,relheight=0.1)
+
+        self.nome_spinbox_blur=Spinbox(self.frame_dados_operador,values=(1,3,5,7,11,13))
+        self.nome_spinbox_blur.place(relx=0.60,rely=0.15, relwidth=0.20,relheight=0.15)
+
+        self.lb_nome=Label(self.frame_dados_operador, text="Min Raio Furos Max: ")
+        self.lb_nome.place(relx=0.80,rely=0.0, relwidth=0.20,relheight=0.08)
+
+        self.nome_spinbox_min_raio=Spinbox(self.frame_dados_operador,from_=0,to=250)
+        self.nome_spinbox_min_raio.place(relx=0.80,rely=0.08, relwidth=0.10,relheight=0.08)
+
+        self.nome_spinbox_max_raio=Spinbox(self.frame_dados_operador,from_=10,to=500)
+        self.nome_spinbox_max_raio.place(relx=0.90,rely=0.08, relwidth=0.10,relheight=0.08)
+
+        self.lb_nome=Label(self.frame_dados_operador, text="Min Raio Extr Max: ")
+        self.lb_nome.place(relx=0.80,rely=0.16, relwidth=0.20,relheight=0.08)
+
+        self.nome_spinbox_min_raio_extrator=Spinbox(self.frame_dados_operador,from_=0,to=250)
+        self.nome_spinbox_min_raio_extrator.place(relx=0.80,rely=0.24, relwidth=0.10,relheight=0.08)
+
+        self.nome_spinbox_max_raio_extrator=Spinbox(self.frame_dados_operador,from_=10,to=500)
+        self.nome_spinbox_max_raio_extrator.place(relx=0.90,rely=0.24, relwidth=0.10,relheight=0.08)
+
+        self.lb_nome=Label(self.frame_dados_operador, text="Porcentagem de Erro: ")
+        self.lb_nome.place(relx=0.60,rely=0.35, relwidth=0.20,relheight=0.1)
+
+        self.nome_spinbox_por_erro=Spinbox(self.frame_dados_operador,from_=0,to=1,increment=0.01)
+        self.nome_spinbox_por_erro.place(relx=0.60,rely=0.45, relwidth=0.20,relheight=0.15)
+
+        self.lb_nome=Label(self.frame_dados_operador, text="Tamanho Min. Contor.: ")
+        self.lb_nome.place(relx=0.80,rely=0.35, relwidth=0.20,relheight=0.1)
+
+        self.nome_spinbox_tam_min=Spinbox(self.frame_dados_operador,from_=0,to=10000)
+        self.nome_spinbox_tam_min.place(relx=0.80,rely=0.45, relwidth=0.20,relheight=0.15)
+        
+        self.canvas_bt=Canvas(self.frame_dados_operador,bd=0,bg='#2F4F4F', highlightbackground='gray',highlightthickness=3)
+        self.canvas_bt.place(relx=0.05,rely=0.75, relwidth=0.9,relheight=0.25)
+       
+        self.bt_limpar=Button(self.frame_dados_operador, text="Limpar",command=self.limpa_cliente)
+        self.bt_limpar.place(relx=0.3,rely=0.8, relwidth=0.1,relheight=0.15)
+
+        self.bt_novo=Button(self.frame_dados_operador,text="Gavar",command=self.add_clientes)
+        self.bt_novo.place(relx=0.6,rely=0.80, relwidth=0.1,relheight=0.15)
+
+    def criando_botoes(self):
+        
+#botões frame 3
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Vizualização",command=self.threading_captura_manual)
+        self.bt_buscar.place(relx=0.05,rely=0.05, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Grava Padrão",command=self.grava_imagem_padrão)
+        self.bt_buscar.place(relx=0.2875,rely=0.05, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Ativa Ciclo",command=self.threading_ativa_ciclo)
+        self.bt_buscar.place(relx=0.525,rely=0.05, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Desliga Ciclo",command=self.desativa_ciclo)
+        self.bt_buscar.place(relx=0.7625,rely=0.05, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Para Vizualização",command=self.para_captura_manual)
+        self.bt_buscar.place(relx=0.05,rely=0.25, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Apaga Padrão",command=self.apaga_imagem_padrão)
+        self.bt_buscar.place(relx=0.2875,rely=0.25, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Apagar Erros",command=self.apaga_erros)
+        self.bt_buscar.place(relx=0.05,rely=0.5, relwidth=0.9,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Testa Saidas",command=self.threading_testa_saidas)
+        self.bt_buscar.place(relx=0.05,rely=0.75, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Libera Máquina",command=self.libera_maquina)
+        self.bt_buscar.place(relx=0.2875,rely=0.75, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="Trava Máquina",command=self.trava_maquina)
+        self.bt_buscar.place(relx=0.525,rely=0.75, relwidth=0.1875,relheight=0.15)
+
+        self.bt_buscar=Button(self.frame_botoes_manuais, text="vazio")
+        self.bt_buscar.place(relx=0.7625,rely=0.75, relwidth=0.1875,relheight=0.15)
+
+    def criando_indicadores(self):
+        global img_button1 
+        global img_button2 
+        global img_button3 
+        global img_button4 
+        global img_button5 
+        global img_button6 
+        global img_button7 
+        global img_button8
+        global img_buttons1 
+        global img_buttons2 
+        global img_buttons3 
+        global img_buttons4 
+        global img_buttons5 
+        global img_buttons6 
+#widget entradas        
+        self.bt_entradas1=Label(self.frame_estado_injetora,bd= 6,image=img_button1)
+        self.bt_entradas1.place(relx=0.05,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas2=Label(self.frame_estado_injetora,image=img_button2)
+        self.bt_entradas2.place(relx=0.15,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas3=Label(self.frame_estado_injetora,image=img_button3)
+        self.bt_entradas3.place(relx=0.25,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas4=Label(self.frame_estado_injetora,image=img_button4)
+        self.bt_entradas4.place(relx=0.35,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas5=Label(self.frame_estado_injetora,image=img_button5)
+        self.bt_entradas5.place(relx=0.45,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas6=Label(self.frame_estado_injetora,image=img_button6)
+        self.bt_entradas6.place(relx=0.55,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas7=Label(self.frame_estado_injetora,image=img_button7)
+        self.bt_entradas7.place(relx=0.65,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas8=Label(self.frame_estado_injetora,image=img_button8)
+        self.bt_entradas8.place(relx=0.75,rely=0.2, relwidth=0.05,relheight=0.15)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Botão Verde' ,bd= 6)
+        self.bt_entradas1.place(relx=0.03,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Botão Amar' ,bd= 6)
+        self.bt_entradas1.place(relx=0.13,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Botão Verm' ,bd= 6)
+        self.bt_entradas1.place(relx=0.23,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Mol. Aber.' ,bd= 6)
+        self.bt_entradas1.place(relx=0.33,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Mol. Fech.' ,bd= 6)
+        self.bt_entradas1.place(relx=0.43,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Autom.' ,bd= 6)
+        self.bt_entradas1.place(relx=0.53,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Porta. Fech.' ,bd= 6)
+        self.bt_entradas1.place(relx=0.63,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.bt_entradas1=Label(self.frame_estado_injetora,text='Reservado' ,bd= 6)
+        self.bt_entradas1.place(relx=0.73,rely=0.1, relwidth=0.09,relheight=0.1)
+
+        self.lb_indicador_ciclo=Label(self.frame_botoes_manuais,text="Ciclo Desligado",bd= 6,bg='#0000FF')
+        self.lb_indicador_ciclo.place(relx=0.525,rely=0.25, relwidth=0.425,relheight=0.15)
+        
+#widgets saidas
+       
+        self.bt_saidas1=Label(self.frame_estado_injetora,bd= 6,image=img_buttons1)
+        self.bt_saidas1.place(relx=0.05,rely=0.6, relwidth=0.05,relheight=0.15)
+
+        self.bt_saidas2=Label(self.frame_estado_injetora,image=img_buttons2)
+        self.bt_saidas2.place(relx=0.15,rely=0.6, relwidth=0.05,relheight=0.15)
+
+        self.bt_saidas3=Label(self.frame_estado_injetora,image=img_buttons3)
+        self.bt_saidas3.place(relx=0.25,rely=0.6, relwidth=0.05,relheight=0.15)
+
+        self.bt_saidas4=Label(self.frame_estado_injetora,image=img_buttons4)
+        self.bt_saidas4.place(relx=0.35,rely=0.6, relwidth=0.05,relheight=0.15)
+
+        self.bt_saidas5=Label(self.frame_estado_injetora,image=img_buttons5)
+        self.bt_saidas5.place(relx=0.45,rely=0.6, relwidth=0.05,relheight=0.15)
+
+        self.bt_saidas6=Label(self.frame_estado_injetora,image=img_buttons6)
+        self.bt_saidas6.place(relx=0.55,rely=0.6, relwidth=0.05,relheight=0.15)
+
+        self.bt_saidas7=Label(self.frame_estado_injetora,text='Liber. Ciclo' ,bd= 6)
+        self.bt_saidas7.place(relx=0.03,rely=0.5, relwidth=0.09,relheight=0.1)
+
+        self.bt_saidas8=Label(self.frame_estado_injetora,text='Emergencia' ,bd= 6)
+        self.bt_saidas8.place(relx=0.13,rely=0.5, relwidth=0.09,relheight=0.1)
+
+        self.bt_saidas9=Label(self.frame_estado_injetora,text='----' ,bd= 6)
+        self.bt_saidas9.place(relx=0.23,rely=0.5, relwidth=0.09,relheight=0.1)
+
+        self.bt_saidas10=Label(self.frame_estado_injetora ,text='---' ,bd= 6)
+        self.bt_saidas10.place(relx=0.33,rely=0.5, relwidth=0.09,relheight=0.1)
+
+        self.bt_saidas11=Label(self.frame_estado_injetora ,text='Cooler' ,bd= 6)
+        self.bt_saidas11.place(relx=0.43,rely=0.5, relwidth=0.09,relheight=0.1)
+
+        self.bt_saidas12=Label(self.frame_estado_injetora ,text='Lampada' ,bd= 6)
+        self.bt_saidas12.place(relx=0.53,rely=0.5, relwidth=0.09,relheight=0.1)
+
+        self.bt_nivel_igualdade=Label(self.frame_estado_injetora ,text='SSIM' ,bd= 6)
+        self.bt_nivel_igualdade.place(relx=0.63,rely=0.5, relwidth=0.1,relheight=0.1)
+
+        self.bt_nivel_igualdade_numero=Label(self.frame_estado_injetora  ,bd= 6)
+        self.bt_nivel_igualdade_numero.place(relx=0.75,rely=0.5, relwidth=0.25,relheight=0.1)
+
+        self.bt_nivel_igualdade=Label(self.frame_estado_injetora ,text='Area Cont' ,bd= 6)
+        self.bt_nivel_igualdade.place(relx=0.63,rely=0.65, relwidth=0.1,relheight=0.1)
+
+        self.bt_nivel_igualdade_contorno=Label(self.frame_estado_injetora  ,bd= 6)
+        self.bt_nivel_igualdade_contorno.place(relx=0.75,rely=0.65, relwidth=0.25,relheight=0.1)
+
+        self.lb_indicador1=Label(self.frame_estado_injetora,text="Injetora Liberada",bd= 6,bg='green')
+        self.lb_indicador1.place(relx=0,rely=0.9, relwidth=1,relheight=0.1)
+        
+    def criando_imagens_padrão(self):
+        global img_vazia
+        
+        self.lb_imagem_padrao=Label(self.frame_imagens,bd= 6,bg='#4F4F4F',image=img_vazia, text="AGUARDANDO IMAGEM PADRÃO")
+        self.lb_imagem_padrao.place(relx=0,rely=0, relwidth=0.49,relheight=0.49)
+        
+        self.lb_imagem_comparacao=Label(self.frame_imagens,bd= 6,bg='#4F4F4F',image=img_vazia,text="AGUARDANDO IMAGEM DE COMPARAÇÃO")
+        self.lb_imagem_comparacao.place(relx=0.51,rely=0, relwidth=0.49,relheight=0.49)
+        
+        self.lb_imagem_comparada=Label(self.frame_imagens,bd= 6,bg='#4F4F4F',image=img_vazia,text="AGUARDANDO IMAGEM COMPARADA")
+        self.lb_imagem_comparada.place(relx=0,rely=0.51, relwidth=0.49,relheight=0.49)
+        
+        self.lb_imagem_diferenca=Label(self.frame_imagens,bd= 6,bg='#4F4F4F',image=img_vazia,text="AGUARDANDO IMAGEM DE DIFERENÇAS")
+        self.lb_imagem_diferenca.place(relx=0.51,rely=0.51, relwidth=0.49,relheight=0.49) 
+           
+    def menus(self):
+        menubar=Menu(self.root)
+        self.root.config(menu=menubar)
+        filemenu=Menu(menubar)
+        filemenu2=Menu(menubar)
+
+        def quit():self.root.destroy()
+        menubar.add_cascade(label="Opções", menu= filemenu)
+        menubar.add_cascade(label="Relatórios", menu= filemenu2)
+
+        filemenu.add_command(label="Sair", command=quit)
+        filemenu.add_command(label="Limpa Cliente", command=self.limpa_cliente)
+
+        filemenu2.add_command(label="Gera Realatório", command=self.gerarelatcliente)
+
+    def lista_fram_2(self):
+        self.listaCli=ttk.Treeview(self.frame_2, height= 3, columns=("col1","col2","col3","col4","col5"))
+        self.listaCli.heading("#0",text="")
+        self.listaCli.heading("#1",text="Codigo")
+        self.listaCli.heading("#2",text="Nome do Operador")
+        self.listaCli.heading("#3",text="Inicio Operação")
+        self.listaCli.heading("#4",text="Fim Operação")
+        self.listaCli.heading("#5",text="Nome Matriz")
+
+        self.listaCli.column("#0",width=10)
+        self.listaCli.column("#1",width=50)
+        self.listaCli.column("#2",width=125)
+        self.listaCli.column("#3",width=110)
+        self.listaCli.column("#4",width=110)
+        self.listaCli.column("#5",width=125)
+
+        self.listaCli.place(relx=0.01, rely=0.01, relwidth=0.95,relheight=0.85)
+
+        self.scrollLista= Scrollbar(self.frame_2,orient='vertical')
+        self.listaCli.configure(yscroll=self.scrollLista.set)
+        self.scrollLista.place(relx=0.96,rely=0.1,relwidth=0.04,relheight=0.75)
+
+        self.listaCli.bind("<Double-1>", self.onDoubleClick)
+
+application() 
+
+video.release()
+cv2.destroyAllWindows
